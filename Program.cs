@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.Configuration;
 using System.ComponentModel.Design;
 using System.IO.Compression;
+using System.Net.Mail;
 
 namespace ServiceNowXMLToHTML
 {
@@ -56,27 +57,8 @@ namespace ServiceNowXMLToHTML
         {
             try
             {
-                string sOutputHTMLFolderRoot = ConfigModel.Config["OutputFolder"];
-                string sOutputSubFolderYear = "";
-                string sOutputSubFolderMonth = "";
-                //string sOutputSubFolderDay = "";
                 string outputLoc = "";
                 string outputFile = "";
-
-                Dictionary<string, string> monthsDict = new Dictionary<string, string> {
-                {"01","January"},
-                {"02","February"},
-                {"03","March"},
-                {"04","April"},
-                {"05","May"},
-                {"06","June"},
-                {"07","July"},
-                {"08","August"},
-                {"09","September"},
-                {"10","October"},
-                {"11","November"},
-                {"12","December"}
-            };
 
                 int creationCount = 0;
 
@@ -89,12 +71,15 @@ namespace ServiceNowXMLToHTML
 
                 var unloadNode = xmlDoc.Element("unload");
 
+                string lastMajorNode = "";
+
                 foreach (var node in unloadNode.Elements())
                 {
-                    if (node.Name == "incident")
+                    if (node.Name == "incident" || node.Name == "x_wf_ap_inquiry")
                     {
+                        lastMajorNode = node.Name.ToString();
                         if (fd.Incident is not null)
-                        {
+                        {                        
                             html = @"
                                     <html>
                                     <head>
@@ -102,7 +87,9 @@ namespace ServiceNowXMLToHTML
                                     div {
                                         width: 100%;
                                         word-break: break-all;
+                                        font-family: Arial, sans-serif;
                                             }
+                                    
                                     </style>
                                     </head>
                                     <body>
@@ -111,12 +98,14 @@ namespace ServiceNowXMLToHTML
                             html += fd.Incident + fd.SysJournal + fd.SysAttachment + fd.SysAttachmentDocument + fd.ChildIncident;
                             html += @"</div></body></html>";
 
-                            sOutputSubFolderYear = fd.SysCreatedDate.Substring(0, 4);
-                            sOutputSubFolderMonth = monthsDict[fd.SysCreatedDate.Substring(5, 2)];
-                            //sOutputSubFolderDay = fd.SysCreatedDate.Substring(8, 2);
+                            if (node.Name == "incident")
+                            {
+                                outputLoc = OutputFolderSelector(lastMajorNode, fd);
+                            }
+                            else if (node.Name == "x_wf_ap_inquiry") {
 
-                            Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
-                            outputLoc = sOutputHTMLFolderRoot + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
+                                outputLoc = OutputFolderSelector(lastMajorNode, fd);
+                            }
                             outputFile = outputLoc + "\\" + fd.SysCreatedDate + "_" + fd.IncNo + ".html";
                             File.WriteAllText(outputFile, html);
 
@@ -124,7 +113,6 @@ namespace ServiceNowXMLToHTML
                             {
                                 foreach (var attachFile in fd.SysAttachmentByteData)
                                 {
-                                    byte[] decodedBytes = attachFile.Value;
                                     DecompressAndWriteToFile(attachFile.Value, outputLoc, attachFile.Key);
                                 }
                             }
@@ -134,7 +122,7 @@ namespace ServiceNowXMLToHTML
 
                             fd = new IncidentDetails();
                         }
-
+                        
                         fd.Incident += ProcessIncidentNode(node, fd);
                     }
                     else if (node.Name == "sys_journal_field")
@@ -153,7 +141,6 @@ namespace ServiceNowXMLToHTML
                     {
                         throw new Exception();
                     }
-
                 }
                 html = @"
                         <html>
@@ -162,6 +149,7 @@ namespace ServiceNowXMLToHTML
                         div {
                             width: 100%;
                             word-break: break-all;
+                            font-family: Arial, sans-serif;
                                 }
                         </style>
                         </head>
@@ -171,12 +159,16 @@ namespace ServiceNowXMLToHTML
                 html += fd.Incident + fd.SysJournal + fd.SysAttachment + fd.SysAttachmentDocument + fd.ChildIncident;
                 html += @"</div></body></html>";
 
-                sOutputSubFolderYear = fd.SysCreatedDate.Substring(0, 4);
-                sOutputSubFolderMonth = monthsDict[fd.SysCreatedDate.Substring(5, 2)];
-                //sOutputSubFolderDay = fd.SysCreatedDate.Substring(8, 2);
+                if (lastMajorNode == "incident")
+                {
+                    outputLoc = OutputFolderSelector(lastMajorNode, fd);
+                }
+                else if (lastMajorNode == "x_wf_ap_inquiry")
+                {
+                    outputLoc = OutputFolderSelector(lastMajorNode, fd);
 
-                Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
-                outputLoc = sOutputHTMLFolderRoot + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
+                }
+
                 outputFile = outputLoc + "\\" + fd.SysCreatedDate + "_" + fd.IncNo + ".html";
                 File.WriteAllText(outputFile, html);
 
@@ -184,7 +176,6 @@ namespace ServiceNowXMLToHTML
                 {
                     foreach (var attachFile in fd.SysAttachmentByteData)
                     {
-                        byte[] decodedBytes = attachFile.Value;
                         DecompressAndWriteToFile(attachFile.Value, outputLoc, attachFile.Key);
                     }
                 }
@@ -218,13 +209,13 @@ namespace ServiceNowXMLToHTML
                 processedIncident += $"<h1>" + node.Element("number").Value + "</h1>";
                 processedIncident += $"<p>";
 
-
                 fd.IncNo = node.Element("number").Value;
 
                 foreach (XElement child in node.Elements())
                 {
                     if (child.Value != "")
                     {
+                        
                         if (child.Name == "sys_created_on" && fd.SysCreatedDate is null)
                         {
                             fd.SysCreatedDate = child.Value.Substring(0, 10);
@@ -293,6 +284,18 @@ namespace ServiceNowXMLToHTML
         #region Sys_Attachment
         static string ProcessSysAttachment(XElement node, IncidentDetails fd)
         {
+            //if (fd.SysAttachmentType is null)
+            //{
+            //    fd.SysAttachmentType = new Dictionary<string, string> { { node.Element("file_name").Value, node.Element("content_type").Value} };
+            //}
+            //else
+            //{
+            //    if (!fd.SysAttachmentType.ContainsKey(node.Element("file_name").Value))
+            //    {
+            //        fd.SysAttachmentType.Add(node.Element("file_name").Value, node.Element("content_type").Value);
+            //    }
+            //}
+
             fd.attachmentHash = node.Element("hash").Value;
             try
             {
@@ -320,13 +323,12 @@ namespace ServiceNowXMLToHTML
 
         #region Sys_Attachment_Document
         static void ProcessSysAttachmentDocument(XElement node, IncidentDetails fd)
-        {
+        {           
             try
             {
                 string attachmentName = node.Element("sys_attachment").Attribute("display_value").Value;
                 byte[] attachmentData = Convert.FromBase64String(node.Element("data").Value);
                 
-
                 if (fd.SysAttachmentByteData is null) {
                     fd.SysAttachmentByteData = new Dictionary<string, byte[]> { { attachmentName, attachmentData } };
                 }
@@ -385,6 +387,18 @@ namespace ServiceNowXMLToHTML
         {
             Directory.CreateDirectory(targetDirectory);
 
+            if (fileName == "")
+            {
+                fileName = Guid.NewGuid().ToString();
+            }
+            
+            string[] reservedCharacters = { "/", "\\", ":", "*", "?", "\"", "<", ">", "|" };
+
+            foreach (string reservedChars in reservedCharacters)
+            {
+                fileName = fileName.Replace(reservedChars, "-");
+            }
+
             string filePath = Path.Combine(targetDirectory, fileName);
             using (FileStream fileStream = new FileStream(filePath, FileMode.Create))
             {
@@ -393,6 +407,54 @@ namespace ServiceNowXMLToHTML
                 {
                     decompressionStream.CopyTo(fileStream);
                 }
+            }
+        }
+
+        static string OutputFolderSelector(string lastMajorNode, IncidentDetails fd)
+        {
+            string sOutputHTMLFolderRoot = ConfigModel.Config["OutputFolder"];
+            string sOutputSubFolderYear = "";
+            string sOutputSubFolderMonth = "";
+            //string sOutputSubFolderDay = "";
+            try
+            {
+
+                Dictionary<string, string> monthsDict = new Dictionary<string, string> {
+                {"01","January"},
+                {"02","February"},
+                {"03","March"},
+                {"04","April"},
+                {"05","May"},
+                {"06","June"},
+                {"07","July"},
+                {"08","August"},
+                {"09","September"},
+                {"10","October"},
+                {"11","November"},
+                {"12","December"}
+                                    };
+
+                sOutputSubFolderYear = fd.SysCreatedDate.Substring(0, 4);
+                sOutputSubFolderMonth = monthsDict[fd.SysCreatedDate.Substring(5, 2)];
+
+                if (lastMajorNode == "incident")
+                {
+                    Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\incidents" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
+                    return sOutputHTMLFolderRoot + $"\\incidents" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
+                }
+                else if (lastMajorNode == "x_wf_ap_inquiry")
+                {
+                    Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\ap_inquiries" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
+                    return sOutputHTMLFolderRoot + $"\\ap_inquiries" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
+                }
+                else
+                {
+                    throw new Exception($"No matching major node selection when creating folder: {lastMajorNode}");
+                }
+            }catch (Exception ex)
+            {
+                Log.Information("Error while attempting to create or use output folder");
+                throw;
             }
         }
     }
