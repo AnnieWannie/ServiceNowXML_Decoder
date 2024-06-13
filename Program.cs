@@ -75,7 +75,7 @@ namespace ServiceNowXMLToHTML
 
                 foreach (var node in unloadNode.Elements())
                 {
-                    if (node.Name == "incident" || node.Name == "x_wf_ap_inquiry")
+                    if (node.Name == "incident" || node.Name == "x_wf_ap_inquiry" || node.Name == "u_w108_afe" || node.Name == "u_workday_ticket_management")
                     {
                         lastMajorNode = node.Name.ToString();
                         if (fd.Incident is not null)
@@ -98,14 +98,8 @@ namespace ServiceNowXMLToHTML
                             html += fd.Incident + fd.SysJournal + fd.SysAttachment + fd.SysAttachmentDocument + fd.ChildIncident;
                             html += @"</div></body></html>";
 
-                            if (node.Name == "incident")
-                            {
-                                outputLoc = OutputFolderSelector(lastMajorNode, fd);
-                            }
-                            else if (node.Name == "x_wf_ap_inquiry") {
+                            outputLoc = OutputLocationCrafter(lastMajorNode, fd);
 
-                                outputLoc = OutputFolderSelector(lastMajorNode, fd);
-                            }
                             outputFile = outputLoc + "\\" + fd.SysCreatedDate + "_" + fd.IncNo + ".html";
                             File.WriteAllText(outputFile, html);
 
@@ -159,15 +153,9 @@ namespace ServiceNowXMLToHTML
                 html += fd.Incident + fd.SysJournal + fd.SysAttachment + fd.SysAttachmentDocument + fd.ChildIncident;
                 html += @"</div></body></html>";
 
-                if (lastMajorNode == "incident")
-                {
-                    outputLoc = OutputFolderSelector(lastMajorNode, fd);
-                }
-                else if (lastMajorNode == "x_wf_ap_inquiry")
-                {
-                    outputLoc = OutputFolderSelector(lastMajorNode, fd);
-
-                }
+                
+                outputLoc = OutputLocationCrafter(lastMajorNode, fd);
+                
 
                 outputFile = outputLoc + "\\" + fd.SysCreatedDate + "_" + fd.IncNo + ".html";
                 File.WriteAllText(outputFile, html);
@@ -224,6 +212,11 @@ namespace ServiceNowXMLToHTML
                         else if (child.Name == "child_incidents")
                         {
                             fd.ChildIncident = $"<h2><b><u>{child.Name}</u></b>: {child.Value.Replace("\n", "<br>")}</h2>";
+                        }
+                        else if (child.Name == "assignment_group")
+                        {
+                            fd.assignmentGroup = child.Attribute("display_value").Value;
+                            processedIncident += $"<b>{child.Name}</b>: {child.Attribute("display_value").Value} <br>";
                         }
                         else
                         {
@@ -410,7 +403,7 @@ namespace ServiceNowXMLToHTML
             }
         }
 
-        static string OutputFolderSelector(string lastMajorNode, IncidentDetails fd)
+        static string OutputLocationCrafter(string lastMajorNode, IncidentDetails fd)
         {
             string sOutputHTMLFolderRoot = ConfigModel.Config["OutputFolder"];
             string sOutputSubFolderYear = "";
@@ -446,6 +439,16 @@ namespace ServiceNowXMLToHTML
                 {
                     Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\ap_inquiries" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
                     return sOutputHTMLFolderRoot + $"\\ap_inquiries" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
+                }
+                else if (lastMajorNode == "u_w108_afe")
+                {
+                    Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\capital_requests" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
+                    return sOutputHTMLFolderRoot + $"\\capital_requests" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
+                }
+                else if (lastMajorNode == "u_workday_ticket_management")
+                {
+                    Directory.CreateDirectory(sOutputHTMLFolderRoot + $"\\workday_tickets" + $"\\{fd.assignmentGroup}" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo);
+                    return sOutputHTMLFolderRoot + $"\\workday_tickets" + $"\\{fd.assignmentGroup}" + $"\\{sOutputSubFolderYear}" + $"\\{sOutputSubFolderMonth}\\" + fd.SysCreatedDate + "_" + fd.IncNo;
                 }
                 else
                 {
