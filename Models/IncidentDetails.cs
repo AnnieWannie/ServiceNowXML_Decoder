@@ -16,6 +16,9 @@ namespace ServiceNowXMLToHTML.Models
         public string SysAttachmentDocument { get; set; }
         public string ChildIncident { get; set; }
         public string attachmentHash { get; set; }
+        public string assignmentGroup { get; set; }
         public Dictionary<string, byte[]> SysAttachmentByteData { get; set; }
+
+        public Dictionary<string, string> SysAttachmentType { get; set; }
     }
 }
