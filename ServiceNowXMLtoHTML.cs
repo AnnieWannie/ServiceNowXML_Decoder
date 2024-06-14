@@ -341,6 +341,10 @@ namespace ServiceNowXMLToHTML
         {
             Directory.CreateDirectory(targetDirectory);
 
+            fileName = fileName.Trim();
+
+            fileName = fileName.Replace("\u200b", "");
+
             if (fileName == "")
             {
                 fileName = Guid.NewGuid().ToString();
