@@ -19,7 +19,6 @@ namespace ServiceNowXMLToHTML
         {
             try
             {
-
                 Log.Logger = new LoggerConfiguration()
                     .WriteTo.File(ConfigModel.Config["LogOutput"], rollingInterval: RollingInterval.Day, outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
                     .CreateLogger();
