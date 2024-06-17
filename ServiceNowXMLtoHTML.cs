@@ -343,7 +343,10 @@ namespace ServiceNowXMLToHTML
 
             fileName = fileName.Trim();
 
+            // Clean up sneaky unicode characters that can break file names
             fileName = fileName.Replace("\u200b", "");
+            fileName = fileName.Replace("\u00A0", "");
+            fileName = fileName.Replace("\uFEFF", "");
 
             if (fileName == "")
             {
